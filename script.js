@@ -2,8 +2,10 @@ var exec_base = ptr(0xA0000000);
 var exec_size = 0x1000000;
 var instr_addr;
 var xenia_offset = 0x100000000;
-var postureControlOffsets = [0xE4, 0x50, 0xDC];
-var amigoOffsets = [0xE4, 0x50, 0x140]; //after, 0x24 != 0 is player
+var postureControlOffsets = [0x50, 0x50, 0xDC];
+var amigoOffsets = [0x50, 0x50, 0x140]; //after, 0x24 != 0 is player
+var playerObjPtrs = [];
+var playeridx = -1;
 console.log("Starting");
 
 function swap32(val) {
@@ -12,6 +14,17 @@ function swap32(val) {
            | ((val >> 8) & 0xFF00)
            | ((val >> 24) & 0xFF);
 }
+function onPtrRecv(val){
+    var pointer = ptr(val.payload);
+    console.log("Received " + pointer);
+    var curr_ptr = pointer;
+    for(var i = 1; i < postureControlOffsets.length; i++) {
+        var be_val = curr_ptr.add(postureControlOffsets[i]).readU32();
+        curr_ptr = ptr(swap32(be_val)).add(xenia_offset);
+        console.log("level " + i + ": " + curr_ptr);
+    }
+}
+
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -23,20 +36,12 @@ Memory.scan(exec_base, exec_size,"B8 50 8C 1E 82" ,{onMatch(address, size) {
         onEnter(args) {
             var base = this.context.rsi.add(0x48).readPointer(); //r5
             console.log("Base: " + base);
-            sleep(500);
-            var playerObjPtr = base.add(xenia_offset).readU32(); //[r5]
-            playerObjPtr = swap32(playerObjPtr);
-            playerObjPtr = ptr(playerObjPtr).add(xenia_offset);
-            console.log(playerObjPtr);
-            var stateMachinePtr = swap32(playerObjPtr.add(amigoOffsets[0]).readU32());
-            stateMachinePtr = ptr(stateMachinePtr).add(xenia_offset);
-            console.log(stateMachinePtr);
-            var characterContextPtr = swap32(stateMachinePtr.add(amigoOffsets[1]).readU32());
-            characterContextPtr = ptr(characterContextPtr).add(xenia_offset);
-            console.log(characterContextPtr);
+            var r5ptr = ptr(swap32(base.add(xenia_offset).readU32())).add(xenia_offset+0x50);
+            send(r5ptr)
         }
     });
     return 'stop';
 }});
+recv('findptr',val => onPtrRecv(val))
 
 
