@@ -17,13 +17,13 @@ function swap32(val) {
            | ((val >> 24) & 0xFF);
 }
 
-var posbuf = new ArrayBuffer(12);
+var posbuf = new ArrayBuffer(28);
 var posview = new DataView(posbuf);
 
 function readposition(msg){
     var baseptr = ptr(msg.payload);
     var posptr = ptrtoPosition(baseptr);
-    var posbytes = posptr.readByteArray(12);
+    var posbytes = posptr.readByteArray(76  );
     posview = new DataView(posbytes);
     send("position", posbytes)
 }
