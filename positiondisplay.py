@@ -19,6 +19,11 @@ hasError = False
 curr_pos = [0,0,0]
 curr_rot = [0,0,0,0]
 curr_vel = [0,0,0]
+curr_igt = 0.0
+curr_gap = b"\x00" * 4
+saved_igt = 0.0
+
+saved_gap = b"\x00" * 4
 recv_time = time.time()
 
 def update_position():
@@ -30,28 +35,31 @@ def update_position():
     print(f"HasError: {hasError}")
     print(f"Ptr Val: {ptr_val:X}")
 
-def save_position():
-    global saved_pos, saved_rot
+def save_state():
+    global saved_pos, saved_rot, saved_igt, saved_gap
     saved_pos = curr_pos
     saved_rot = curr_rot
+    saved_igt = curr_igt
+    saved_gap = curr_gap
     print(f"saved position as {saved_pos}")
 
-def load_position():
+def load_state():
     global saved_pos
     print(f"LOADING {saved_pos}")
     if saved_pos[0] == 0 and saved_pos[1] == 0 and saved_pos[2] == 0:
         return
-    payload_obj = {"pos_bytes": list(struct.pack(">3f",*saved_pos)), "baseptr": ptr_val}
+    dat = saved_pos + [bytes(saved_gap)] + saved_rot
+    payload_obj = {"pos_bytes": list(struct.pack(">3f4s4f",*dat)), "baseptr": ptr_val, "igt": list(struct.pack(">f", saved_igt))}
     script.post({"type":"writepos","payload": payload_obj})
 
 posThread = Thread(target=update_position,daemon=True)
 
 def on_message(message, data):
-    global hasError, ptr_val, posThread, pos, recv_time, curr_pos, curr_rot, curr_vel
+    global hasError, ptr_val, posThread, pos, recv_time, curr_pos, curr_rot, curr_vel, curr_igt, curr_gap
     if message['type'] == 'send':
         #   print(message['payload'])
         if message['payload'].startswith("0x"):
-            now = datetime.now()
+
             cooldown_tdelta = time.time() - recv_time
             if ptr_val == -1 or cooldown_tdelta >= 5:
                 ptr_val = int(message['payload'],16)
@@ -66,11 +74,13 @@ def on_message(message, data):
             elif cooldown_tdelta < 5:
                 print("too soon bro")
         elif message['payload'] == "position":
-            floatarr = data
-            x,y,z,_,xr,yr,zr,wr,_,vx,vy,vz = struct.unpack(">3f4s4f32s3f", floatarr)
+            print(data)
+            x,y,z,gap1,xr,yr,zr,wr,_,vx,vy,vz,curr_igt = struct.unpack(">3f4s4f32s4f", data)
             curr_pos = [x,y,z]
             curr_rot = [xr,yr,zr,wr]
             curr_vel = [vx,vy,vz]
+            curr_gap = gap1
+
             positionVar.set("Position: " + float3format.format(*curr_pos))
             speedVar.set("Velocity: " + float3format.format(*curr_vel))
             rotationVar.set("Rotation: " + float4format.format(*curr_rot))
@@ -97,8 +107,8 @@ if __name__ == '__main__':
     l = ttk.Label(textvariable=positionVar).grid(row=0,column=0,columnspan=2)
     rl = ttk.Label(textvariable=rotationVar).grid(row=1, column=0, columnspan=2)
     vl = ttk.Label(textvariable=speedVar).grid(row=2,column=0,columnspan=2)
-    savebtn = ttk.Button(text="Save (F9)",command=save_position).grid(row=3,column=0)
-    loadbtn = ttk.Button(text="Load (F10)",command=load_position).grid(row=3,column=1)
-    keyboard.add_hotkey("F9",save_position)
-    keyboard.add_hotkey("F10",load_position)
+    savebtn = ttk.Button(text="Save (F9)", command=save_state).grid(row=3, column=0)
+    loadbtn = ttk.Button(text="Load (F10)", command=load_state).grid(row=3, column=1)
+    keyboard.add_hotkey("F9", save_state)
+    keyboard.add_hotkey("F10", load_state)
     root.mainloop()

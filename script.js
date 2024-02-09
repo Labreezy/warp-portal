@@ -1,8 +1,8 @@
 var exec_base = ptr(0xA0000000);
 var exec_size = 0x1000000;
 var instr_addr = ptr(0);
-var xenia_offset = 0x100000000;
-
+var xenia_offset = 0x100000000; //TODO: find this offset dynamically
+var timer_ptr = ptr(xenia_offset).add(0x40002F80);
 var amigoOffsets = [0x50, 0x50, 0x140]; //after, 0x24 != 0 is player
 var playerObjPtrs = [];
 var r4vals = [];
@@ -20,12 +20,24 @@ function swap32(val) {
 var posbuf = new ArrayBuffer(28);
 var posview = new DataView(posbuf);
 
+function concatTypedArrays(a,b){
+    var res = new Uint8Array(a.length + b.length)
+    res.set(a)
+    res.set(b,a.length)
+    return res
+}
+
 function readposition(msg){
     var baseptr = ptr(msg.payload);
     var posptr = ptrtoPosition(baseptr);
-    var posbytes = posptr.readByteArray(76  );
-    posview = new DataView(posbytes);
-    send("position", posbytes)
+    var posbytes = posptr.readByteArray(76);
+    var posbytearr = new Uint8Array(posbytes)
+    var igtbytes = timer_ptr.readByteArray(4);
+
+    var igtbytearr = new Uint8Array(igtbytes)
+
+    var posdat = concatTypedArrays(posbytearr,igtbytearr);
+    send("position", posdat.buffer);
 }
 function writeposition(msg){
     console.log("guh");
@@ -33,7 +45,9 @@ function writeposition(msg){
     console.log(JSON.stringify(payloadobj));
     var posbytes = payloadobj.pos_bytes;
     var posptr = ptrtoPosition(ptr(payloadobj.baseptr))
-        posptr.writeByteArray(posbytes);
+    posptr.writeByteArray(posbytes);
+    var igt = payloadobj.igt
+    timer_ptr.writeByteArray(igt);
 }
 
 function scanForPosition() {
